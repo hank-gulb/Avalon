@@ -540,7 +540,8 @@
     function promptNextMissionPlayer() {
       const team = gameState.proposedTeam;
       if (gameState.missionCardIndex >= team.length) {
-        resolveMission();
+        // All mission cards are in; show a separate reveal screen
+        showMissionRevealPrompt();
         return;
       }
       const playerIndex = team[gameState.missionCardIndex];
@@ -554,6 +555,7 @@
         <button onclick="showMissionChoiceForCurrent()">I'm ${player.name}</button>
       `);
     }
+
 
     function showMissionChoiceForCurrent() {
       const team = gameState.proposedTeam;
@@ -590,6 +592,31 @@
       gameState.missionCardIndex++;
       promptNextMissionPlayer();
     }
+
+    function showMissionRevealPrompt() {
+      const missionNumber = gameState.missionIndex + 1;
+      const teamNames = gameState.proposedTeam
+        .map(i => gameState.players[i].name)
+        .join(", ");
+    
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Mission ${missionNumber}: Ready to Reveal</h2>
+        <p>All mission cards have been submitted.</p>
+        <p class="small">
+          Team on this mission: <strong>${teamNames}</strong>
+        </p>
+        <p>When everyone is ready, tap below to reveal whether the mission succeeded or failed.</p>
+        <button onclick="revealMissionResult()">Reveal Mission Result</button>
+      `);
+    }
+
+function revealMissionResult() {
+  // Now actually calculate and show success/failure
+  resolveMission();
+}
+
 
     function resolveMission() {
       const missionNumber = gameState.missionIndex + 1;
