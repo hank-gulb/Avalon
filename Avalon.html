@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Avalon Helper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #111;
+      color: #f5f5f5;
+    }
+    #app {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 16px 20px 40px;
+    }
+    h1, h2, h3 {
+      margin-top: 0.4em;
+      margin-bottom: 0.4em;
+    }
+    h1 {
+      font-size: 1.8rem;
+      text-align: center;
+    }
+    h2 {
+      font-size: 1.4rem;
+    }
+    p {
+      line-height: 1.4;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 8px;
+      margin: 4px 0 10px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #1b1b1b;
+      color: #f5f5f5;
+      box-sizing: border-box;
+      font-size: 1rem;
+    }
+    button {
+      padding: 10px 16px;
+      margin: 6px 4px 0;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      background: #2d6cdf;
+      color: white;
+    }
+    button.secondary {
+      background: #444;
+    }
+    button.danger {
+      background: #c0392b;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .scoreboard {
+      margin: 8px 0 16px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #1c1c1c;
+      font-size: 0.95rem;
+    }
+    .mission-track span {
+      display: inline-block;
+      min-width: 22px;
+      text-align: center;
+      margin-right: 6px;
+      font-size: 1.1rem;
+    }
+    .label {
+      font-weight: 600;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .small {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    .name-list {
+      margin-top: 6px;
+      padding-left: 12px;
+    }
+    .name-list li {
+      margin: 2px 0;
+    }
+    .role-text {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #191919;
+    }
+    .role-name {
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .good {
+      color: #5ad45a;
+    }
+    .evil {
+      color: #ff6b6b;
+    }
+    .divider {
+      border-top: 1px solid #333;
+      margin: 14px 0;
+    }
+    .name-input-label {
+      margin-top: 4px;
+      display: block;
+      font-size: 0.9rem;
+    }
+    .player-list {
+      margin-top: 6px;
+    }
+    .player-list label {
+      display: block;
+      margin: 4px 0;
+    }
+    .final-roles {
+      margin-top: 12px;
+      padding-left: 0;
+      list-style: none;
+    }
+    .final-roles li {
+      margin: 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    // --------- GAME STATE ---------
+    const missionTeamSizes = {
+      5: [2, 3, 2, 3, 3],
+      6: [2, 3, 4, 3, 4],
+      7: [2, 3, 3, 4, 4],
+      8: [3, 4, 4, 5, 5],
+      9: [3, 4, 4, 5, 5],
+      10: [3, 4, 4, 5, 5]
+    };
+
+    let gameState = null;
+
+    // --------- UTILITIES ---------
+    function render(html) {
+      document.getElementById('app').innerHTML = html;
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function scoreboardHtml() {
+      if (!gameState) return "";
+      const results = gameState.missionResults || [];
+      let track = "";
+      for (let i = 0; i < 5; i++) {
+        let symbol = "⬜";
+        if (i < results.length) {
+          symbol = results[i] === "success" ? "✅" : "❌";
+        }
+        track += `<span>${symbol}</span>`;
+      }
+      return `
+        <div class="scoreboard">
+          <div><span class="label">Missions:</span> 
+            <span class="mission-track">${track}</span>
+          </div>
+          <div class="small">
+            Loyal successes: ${gameState.successCount} &nbsp;|&nbsp;
+            Minion fails: ${gameState.failCount}
+          </div>
+          <div class="small">
+            Current leader: <strong>${gameState.players[gameState.leaderIndex].name}</strong> &nbsp;|&nbsp;
+            Mission ${gameState.missionIndex + 1} of 5
+          </div>
+        </div>
+      `;
+    }
+
+    function alignmentForRole(role) {
+      const goodRoles = ["Merlin", "Percival", "Servant of Arthur", "Tristan", "Isolde"];
+      return goodRoles.includes(role) ? "good" : "evil";
+    }
+
+    // Roles by player count, using your recommended setups
+    function rolesForCount(n) {
+      switch (n) {
+        case 5:
+          return ["Merlin", "Percival", "Servant of Arthur", "Mordred", "Morgana"];
+        case 6:
+          return ["Merlin", "Percival", "Servant of Arthur", "Servant of Arthur", "Mordred", "Morgana"];
+        case 7:
+          return ["Merlin", "Percival", "Servant of Arthur", "Servant of Arthur", "Mordred", "Morgana", "Minion of Mordred"];
+        case 8:
+          return ["Merlin", "Percival", "Servant of Arthur", "Servant of Arthur", "Servant of Arthur", "Mordred", "Morgana", "Minion of Mordred"];
+        case 9:
+          return ["Merlin", "Percival", "Tristan", "Isolde", "Servant of Arthur", "Servant of Arthur", "Mordred", "Morgana", "Minion of Mordred"];
+        case 10:
+          return ["Merlin", "Percival", "Tristan", "Isolde", "Servant of Arthur", "Servant of Arthur", "Mordred", "Morgana", "Minion of Mordred", "Oberon"];
+        default:
+          return null;
+      }
+    }
+
+    // Knowledge text for each role during role reveal
+    function knowledgeTextForPlayer(player) {
+      const players = gameState.players;
+      const evilPlayers = players.filter(p => p.alignment === "evil");
+      const evilKnownToEachOther = players.filter(p => p.alignment === "evil" && p.role !== "Oberon");
+      const evilSeenByMerlin = players.filter(p => p.alignment === "evil" && p.role !== "Mordred");
+      const merlinAndMorgana = players.filter(p => p.role === "Merlin" || p.role === "Morgana");
+      const lovers = players.filter(p => p.role === "Tristan" || p.role === "Isolde");
+
+      switch (player.role) {
+        case "Merlin": {
+          const seen = evilSeenByMerlin.map(p => p.name);
+          if (seen.length === 0) return "You do not see any evil players (this should not normally happen).";
+          return "You know these players are Minions of Mordred (but Mordred is hidden from you): " +
+                 "<ul class='name-list'>" + seen.map(n => `<li>${n}</li>`).join("") + "</ul>";
+        }
+        case "Percival": {
+          const names = merlinAndMorgana.map(p => p.name);
+          return "You know that Merlin is one of these players (the other is Morgana): " +
+                 "<ul class='name-list'>" + names.map(n => `<li>${n}</li>`).join("") + "</ul>";
+        }
+        case "Mordred":
+        case "Morgana":
+        case "Minion of Mordred": {
+          const others = evilKnownToEachOther.filter(p => p.name !== player.name).map(p => p.name);
+          let extra = "";
+          if (player.role === "Morgana") {
+            extra = "Percival sees you as if you were Merlin.";
+          } else if (player.role === "Mordred") {
+            extra = "Merlin cannot see that you are evil.";
+          }
+          return "You are a Minion of Mordred. These are the other visible Minions: " +
+                 "<ul class='name-list'>" + (others.length ? others.map(n => `<li>${n}</li>`).join("") : "<li>(none)</li>") + "</ul>" +
+                 (extra ? `<p class='small'>${extra}</p>` : "");
+        }
+        case "Oberon": {
+          return "You are a Minion of Mordred, but the other Minions do <strong>not</strong> know who you are, and you do not see them.";
+        }
+        case "Tristan":
+        case "Isolde": {
+          const partner = lovers.find(p => p.role !== player.role);
+          if (partner) {
+            return `You are in love with <strong>${partner.name}</strong>. You both serve Arthur and know each other.`;
+          }
+          return "You are in love with another Loyal Servant of Arthur.";
+        }
+        case "Servant of Arthur": {
+          return "You are a Loyal Servant of Arthur. You do not know who the other good or evil players are.";
+        }
+        default:
+          return "";
+      }
+    }
+
+    // --------- SETUP SCREENS ---------
+    function showPlayerCountScreen() {
+      gameState = null;
+      render(`
+        <h1>Avalon Helper</h1>
+        <h2>Setup</h2>
+        <p>How many players are in the game? (5–10)</p>
+        <select id="playerCount">
+          <option value="5">5 players</option>
+          <option value="6">6 players</option>
+          <option value="7">7 players</option>
+          <option value="8">8 players</option>
+          <option value="9">9 players</option>
+          <option value="10">10 players</option>
+        </select>
+        <button onclick="confirmPlayerCount()">Next: Enter Names</button>
+      `);
+    }
+
+    function confirmPlayerCount() {
+      const value = parseInt(document.getElementById("playerCount").value, 10);
+      if (isNaN(value) || value < 5 || value > 10) {
+        alert("Please choose a number of players between 5 and 10.");
+        return;
+      }
+      showNameEntryScreen(value);
+    }
+
+    function showNameEntryScreen(count) {
+      let inputs = "";
+      for (let i = 0; i < count; i++) {
+        inputs += `
+          <label class="name-input-label">Player ${i + 1} name:</label>
+          <input type="text" id="playerName-${i}" placeholder="Player ${i + 1}">
+        `;
+      }
+      render(`
+        <h1>Avalon Helper</h1>
+        <h2>Player Names</h2>
+        <p>Enter each player's name (or leave blank to use "Player 1", etc.).</p>
+        ${inputs}
+        <button onclick="startGameFromNames(${count})">Start Game</button>
+        <button class="secondary" onclick="showPlayerCountScreen()">Back</button>
+      `);
+    }
+
+    function startGameFromNames(count) {
+      const names = [];
+      for (let i = 0; i < count; i++) {
+        const raw = document.getElementById(`playerName-${i}`).value.trim();
+        names.push(raw || `Player ${i + 1}`);
+      }
+
+      const roles = rolesForCount(count);
+      if (!roles) {
+        alert("Unsupported player count.");
+        return;
+      }
+
+      const shuffledRoles = shuffle(roles.slice());
+
+      gameState = {
+        players: names.map((name, idx) => {
+          const role = shuffledRoles[idx];
+          return {
+            name,
+            role,
+            alignment: alignmentForRole(role)
+          };
+        }),
+        leaderIndex: Math.floor(Math.random() * count),
+        missionIndex: 0,
+        missionResults: [],
+        failedProposalsInRow: 0,
+        proposedTeam: [],
+        votes: [],
+        voteIndex: 0,
+        missionCards: [],
+        missionCardIndex: 0,
+        successCount: 0,
+        failCount: 0,
+        roleRevealIndex: 0
+      };
+
+      showRoleRevealIntro();
+    }
+
+    // --------- ROLE REVEAL ---------
+    function showRoleRevealIntro() {
+      render(`
+        <h1>Avalon Helper</h1>
+        <h2>Secret Roles</h2>
+        <p>The app will now show each player their role in turn.</p>
+        <ol class="small">
+          <li>Call out the next name on-screen.</li>
+          <li>Pass them the device so only they can see.</li>
+          <li>They tap to reveal their role, read it, then hide the screen.</li>
+        </ol>
+        <button onclick="startRoleReveal()">Begin Role Reveal</button>
+      `);
+    }
+
+    function startRoleReveal() {
+      gameState.roleRevealIndex = 0;
+      showRoleRevealPassScreen();
+    }
+
+    function showRoleRevealPassScreen() {
+      const idx = gameState.roleRevealIndex;
+      if (idx >= gameState.players.length) {
+        startNextMission();
+        return;
+      }
+      const player = gameState.players[idx];
+      render(`
+        <h1>Avalon Helper</h1>
+        <h2>Secret Role</h2>
+        <p>Pass the device to <strong>${player.name}</strong>, then let them tap below.</p>
+        <button onclick="revealCurrentPlayerRole()">Reveal my role</button>
+      `);
+    }
+
+    function revealCurrentPlayerRole() {
+      const idx = gameState.roleRevealIndex;
+      const player = gameState.players[idx];
+      const alignClass = player.alignment === "good" ? "good" : "evil";
+      const alignText = player.alignment === "good"
+        ? "Loyal Servant of Arthur (Good)"
+        : "Minion of Mordred (Evil)";
+
+      render(`
+        <h1>Avalon Helper</h1>
+        <h2>Your Role</h2>
+        <div class="role-text">
+          <div class="role-name ${alignClass}">${player.role}</div>
+          <div class="small ${alignClass}">${alignText}</div>
+          <div style="margin-top:8px;">${knowledgeTextForPlayer(player)}</div>
+        </div>
+        <p class="small">When you're done reading, hide the screen and pass the device back to the group.</p>
+        <button onclick="finishRoleRevealForCurrent()">Done</button>
+      `);
+    }
+
+    function finishRoleRevealForCurrent() {
+      gameState.roleRevealIndex++;
+      showRoleRevealPassScreen();
+    }
+
+    // --------- MISSION FLOW ---------
+    function startNextMission() {
+      // If game already ended for any reason, don't continue.
+      if (gameState.successCount >= 3 || gameState.failCount >= 3 || gameState.missionIndex >= 5) {
+        return;
+      }
+
+      const missionNumber = gameState.missionIndex + 1;
+      const teamSize = missionTeamSizes[gameState.players.length][gameState.missionIndex];
+      const leader = gameState.players[gameState.leaderIndex];
+
+      gameState.proposedTeam = [];
+
+      const forceAutoApprove = gameState.failedProposalsInRow >= 4;
+
+      const playersOptions = gameState.players
+        .map((p, index) =>
+          `<label><input type="checkbox" name="team" value="${index}"> ${p.name}</label>`
+        )
+        .join("<br>");
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Mission ${missionNumber}: Team Selection</h2>
+        <p><strong>Leader:</strong> ${leader.name}</p>
+        <p>This mission requires <strong>${teamSize}</strong> players.</p>
+        ${forceAutoApprove
+          ? `<p class="small">Note: The last four team proposals were rejected. This leader's team will be <strong>automatically approved</strong> with no vote.</p>`
+          : `<p class="small">After the team is chosen, all players will secretly vote to approve or reject it.</p>`
+        }
+        <div class="player-list">
+          ${playersOptions}
+        </div>
+        <button onclick="confirmTeamSelection(${teamSize}, ${forceAutoApprove})">Confirm Team</button>
+      `);
+    }
+
+    function confirmTeamSelection(requiredSize, autoApprove) {
+      const checked = Array.from(document.querySelectorAll('input[name="team"]:checked'));
+      if (checked.length !== requiredSize) {
+        alert(`You must select exactly ${requiredSize} players.`);
+        return;
+      }
+      gameState.proposedTeam = checked.map(cb => parseInt(cb.value, 10));
+
+      if (autoApprove) {
+        gameState.failedProposalsInRow = 0;
+        startMissionCards();
+      } else {
+        startVoting();
+      }
+    }
+
+    // --------- VOTING ---------
+    function startVoting() {
+      gameState.votes = [];
+      gameState.voteIndex = 0;
+      showVotePrompt();
+    }
+
+    function showVotePrompt() {
+      if (gameState.voteIndex >= gameState.players.length) {
+        const yesVotes = gameState.votes.filter(v => v === true).length;
+        const noVotes = gameState.players.length - yesVotes;
+        const accepted = yesVotes > noVotes;
+
+        if (accepted) {
+          gameState.failedProposalsInRow = 0;
+          render(`
+            <h1>Avalon Helper</h1>
+            ${scoreboardHtml()}
+            <h2>Team Vote Result</h2>
+            <p>The proposed team has been <strong>APPROVED</strong>.</p>
+            <p>Votes: ✅ ${yesVotes} &nbsp;&nbsp; ❌ ${noVotes}</p>
+            <button onclick="startMissionCards()">Continue to Mission</button>
+          `);
+        } else {
+          gameState.failedProposalsInRow++;
+          const prevLeader = gameState.leaderIndex;
+          gameState.leaderIndex = (gameState.leaderIndex + 1) % gameState.players.length;
+          render(`
+            <h1>Avalon Helper</h1>
+            ${scoreboardHtml()}
+            <h2>Team Vote Result</h2>
+            <p>The proposed team has been <strong>REJECTED</strong>.</p>
+            <p>Votes: ✅ ${yesVotes} &nbsp;&nbsp; ❌ ${noVotes}</p>
+            <p class="small">Leader passes from ${gameState.players[prevLeader].name} to ${gameState.players[gameState.leaderIndex].name}.</p>
+            <button onclick="startNextMission()">New Team Proposal</button>
+          `);
+        }
+        return;
+      }
+
+      const player = gameState.players[gameState.voteIndex];
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Team Vote</h2>
+        <p>Pass the device to <strong>${player.name}</strong> to vote on the proposed team.</p>
+        <p class="small">Your vote is secret. Choose honestly.</p>
+        <button onclick="recordVote(true)">Approve ✅</button>
+        <button class="secondary" onclick="recordVote(false)">Reject ❌</button>
+      `);
+    }
+
+    function recordVote(value) {
+      gameState.votes.push(value);
+      gameState.voteIndex++;
+      showVotePrompt();
+    }
+
+    // --------- MISSION CARDS ---------
+    function startMissionCards() {
+      gameState.missionCards = [];
+      gameState.missionCardIndex = 0;
+      promptNextMissionPlayer();
+    }
+
+    function promptNextMissionPlayer() {
+      const team = gameState.proposedTeam;
+      if (gameState.missionCardIndex >= team.length) {
+        resolveMission();
+        return;
+      }
+      const playerIndex = team[gameState.missionCardIndex];
+      const player = gameState.players[playerIndex];
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Mission Cards</h2>
+        <p>Pass the device to <strong>${player.name}</strong>, who is on the mission.</p>
+        <button onclick="showMissionChoiceForCurrent()">I'm ${player.name}</button>
+      `);
+    }
+
+    function showMissionChoiceForCurrent() {
+      const team = gameState.proposedTeam;
+      const playerIndex = team[gameState.missionCardIndex];
+      const player = gameState.players[playerIndex];
+
+      const good = player.alignment === "good";
+
+      let buttons;
+      if (good) {
+        buttons = `
+          <button onclick="recordMissionCard('success')">Play SUCCESS ✅</button>
+          <p class="small">As a Loyal Servant of Arthur, you must play Success.</p>
+        `;
+      } else {
+        buttons = `
+          <button onclick="recordMissionCard('success')">Play SUCCESS ✅</button>
+          <button class="danger" onclick="recordMissionCard('fail')">Play FAIL ❌</button>
+          <p class="small">As a Minion of Mordred, you may choose Success or Fail.</p>
+        `;
+      }
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Mission Card: ${player.name}</h2>
+        <p>Choose which card to submit for this mission. Keep your choice secret.</p>
+        ${buttons}
+      `);
+    }
+
+    function recordMissionCard(card) {
+      gameState.missionCards.push(card);
+      gameState.missionCardIndex++;
+      promptNextMissionPlayer();
+    }
+
+    function resolveMission() {
+      const missionNumber = gameState.missionIndex + 1;
+      const shuffled = shuffle(gameState.missionCards.slice());
+      const fails = shuffled.filter(c => c === "fail").length;
+
+      const playerCount = gameState.players.length;
+      const requiresTwoFails = (playerCount >= 7 && gameState.missionIndex === 3); // 4th mission for 7+ players
+      const failsRequired = requiresTwoFails ? 2 : 1;
+
+      const missionSuccess = fails < failsRequired;
+
+      gameState.missionResults[gameState.missionIndex] = missionSuccess ? "success" : "fail";
+      if (missionSuccess) {
+        gameState.successCount++;
+      } else {
+        gameState.failCount++;
+      }
+
+      // Mission done: proposals reset, leader moves on
+      gameState.failedProposalsInRow = 0;
+      const prevLeader = gameState.leaderIndex;
+      gameState.leaderIndex = (gameState.leaderIndex + 1) % gameState.players.length;
+      gameState.missionIndex++;
+
+      // Check win conditions
+      if (gameState.failCount >= 3) {
+        showGameEnd("evil", `The Minions of Mordred caused ${gameState.failCount} missions to fail.`);
+        return;
+      }
+      if (gameState.successCount >= 3) {
+        startAssassinationPhase(fails, failsRequired, missionSuccess);
+        return;
+      }
+
+      if (gameState.missionIndex >= 5) {
+        // All missions used; whoever has more wins (this only really matters in non-standard variants,
+        // but we'll be defensive).
+        const winner = gameState.successCount > gameState.failCount ? "good" : "evil";
+        const reason = winner === "good"
+          ? "After five missions, the Loyal Servants of Arthur have more successes."
+          : "After five missions, the Minions of Mordred have more failed missions.";
+        showGameEnd(winner, reason);
+        return;
+      }
+
+      const resultText = missionSuccess ? "SUCCESS ✅" : "FAIL ❌";
+      const detail = requiresTwoFails
+        ? `This mission required ${failsRequired} Fail cards to fail.`
+        : `This mission required at least ${failsRequired} Fail card to fail.`;
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Mission ${missionNumber} Result</h2>
+        <p>The mission result is: <strong>${resultText}</strong></p>
+        <p>Fail cards revealed: <strong>${fails}</strong></p>
+        <p class="small">${detail}</p>
+        <p class="small">Next leader: ${gameState.players[gameState.leaderIndex].name}</p>
+        <button onclick="startNextMission()">Next Mission</button>
+      `);
+    }
+
+    // --------- ASSASSINATION PHASE ---------
+    function startAssassinationPhase(lastFails, failsRequired, missionSuccess) {
+      const missionNumber = gameState.missionIndex; // this mission just finished
+      const detail = `
+        Mission ${missionNumber} result: ${missionSuccess ? "SUCCESS ✅" : "FAIL ❌"}.
+        Fail cards revealed: ${lastFails}. Mission required ${failsRequired} fail(s) to fail.
+      `;
+
+      const playerButtons = gameState.players.map((p, index) =>
+        `<button onclick="resolveAssassination(${index})">${p.name}</button>`
+      ).join("<br>");
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Merlin Assassination</h2>
+        <p>The Loyal Servants of Arthur have completed 3 missions.</p>
+        <p class="small">${detail}</p>
+        <div class="divider"></div>
+        <p><strong>Minions of Mordred:</strong> secretly choose one player to assassinate, who you believe is Merlin.</p>
+        <p class="small">Pass the device to the evil players. They should discuss quietly, then tap the chosen name.</p>
+        <div class="player-list">
+          ${playerButtons}
+        </div>
+      `);
+    }
+
+    function resolveAssassination(index) {
+      const target = gameState.players[index];
+      const merlinKilled = (target.role === "Merlin");
+      if (merlinKilled) {
+        showGameEnd("evil", `The Minions correctly assassinated Merlin (${target.name}).`);
+      } else {
+        showGameEnd("good", `The Minions assassinated ${target.name}, who was <strong>not</strong> Merlin.`);
+      }
+    }
+
+    // --------- GAME END ---------
+    function showGameEnd(winner, reasonHtml) {
+      const goodWon = winner === "good";
+
+      const finalRoles = gameState.players.map(p =>
+        `<li><strong>${p.name}</strong> — <span class="${p.alignment}">${p.role}</span></li>`
+      ).join("");
+
+      render(`
+        <h1>Avalon Helper</h1>
+        ${scoreboardHtml()}
+        <h2>Game Over</h2>
+        <p>The winner is: <strong class="${goodWon ? "good" : "evil"}">
+          ${goodWon ? "Loyal Servants of Arthur" : "Minions of Mordred"}
+        </strong></p>
+        <p>${reasonHtml || ""}</p>
+        <div class="divider"></div>
+        <h3>Final Roles</h3>
+        <ul class="final-roles">
+          ${finalRoles}
+        </ul>
+        <button onclick="showPlayerCountScreen()">Play Again</button>
+      `);
+    }
+
+    // --------- INIT ---------
+    function init() {
+      showPlayerCountScreen();
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
